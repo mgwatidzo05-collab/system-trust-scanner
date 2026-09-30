@@ -1,0 +1,6 @@
+{
+  "name": "System Trust Scanner - Remote-Access & Compromise Detector",
+  "description": "A lightweight local-scan compromise detector for remote access tools (RATs), unauthorized persistence, and suspicious processes. Built for the NUST CyberHub Cybersecurity Innovation Challenge.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
