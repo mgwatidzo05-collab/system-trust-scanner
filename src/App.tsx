@@ -9,18 +9,19 @@ import {
   Eye, 
   Sparkles, 
   Wrench, 
-  RotateCw,
-  Lock,
-  FileCode,
-  FileText,
-  CheckCircle2,
-  AlertTriangle,
-  Play,
-  Activity,
-  Layers,
-  HardDrive,
-  DownloadCloud,
-  FileSearch
+  RotateCw, 
+  Lock, 
+  FileCode, 
+  FileText, 
+  CheckCircle2, 
+  AlertTriangle, 
+  Play, 
+  Activity, 
+  Layers, 
+  DownloadCloud, 
+  Info,
+  Monitor,
+  Smartphone
 } from 'lucide-react';
 
 import { SCENARIOS } from './data/scenarios';
@@ -29,11 +30,16 @@ import { soundFx } from './utils/audio';
 import { PythonScriptModal } from './components/PythonScriptModal';
 import { ReportModal } from './components/ReportModal';
 import { RealScannerCard } from './components/RealScannerCard';
+import { ThreatDetailModal, ThreatIntelligence } from './components/ThreatDetailModal';
+import { detectMachineProfile, MachineProfile } from './utils/realScanner';
 
 export default function App() {
   // Mode: 'real' (scans real local files/device) or 'demo' (preset simulation)
   const [appMode, setAppMode] = useState<'real' | 'demo'>('real');
   
+  // Host Machine Info
+  const [machineProfile, setMachineProfile] = useState<MachineProfile | null>(null);
+
   // Demo state
   const [scenarioId, setScenarioId] = useState<'clean-laptop' | 'active-rat-attack'>('active-rat-attack');
   const [remediatedIds, setRemediatedIds] = useState<Set<string>>(new Set());
@@ -42,6 +48,9 @@ export default function App() {
   const [scanningMessage, setScanningMessage] = useState<string>('');
   const [activeFilter, setActiveFilter] = useState<'all' | 'flagged' | 'safe'>('all');
 
+  // Threat Detail Modal State
+  const [selectedThreat, setSelectedThreat] = useState<ThreatIntelligence | null>(null);
+
   // PWA Install prompt state
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [isInstallable, setIsInstallable] = useState<boolean>(false);
@@ -49,6 +58,11 @@ export default function App() {
   // Modals for technical inspection
   const [pythonModalOpen, setPythonModalOpen] = useState<boolean>(false);
   const [reportModalOpen, setReportModalOpen] = useState<boolean>(false);
+
+  // Auto detect machine
+  useEffect(() => {
+    detectMachineProfile().then(prof => setMachineProfile(prof));
+  }, []);
 
   // Capture PWA beforeinstallprompt
   useEffect(() => {
@@ -99,6 +113,7 @@ export default function App() {
       isSuspicious: boolean;
       statusText: string;
       icon: typeof Wifi;
+      threatIntel?: ThreatIntelligence;
     }> = [];
 
     activeScenario.ratTools.forEach((rat) => {
@@ -115,7 +130,28 @@ export default function App() {
           : 'Verified dormant (not running in memory).',
         isSuspicious: isFlagged,
         statusText: isFlagged ? 'Active Screen Watcher' : 'Safe / Clean',
-        icon: Eye
+        icon: Eye,
+        threatIntel: {
+          id: rat.id,
+          title: `Active Remote Desktop Tool: ${rat.toolName}`,
+          threatType: 'Remote Desktop RAT',
+          severity: 'Critical',
+          fileNameOrProcess: rat.processName,
+          locationOrPort: rat.category,
+          howItEntered: 'Often installed quietly via remote technical support phone scams or masqueraded software bundles.',
+          capabilities: [
+            'Real-time screen viewing & mouse control',
+            'File transfer to remote external servers',
+            'Full administrative desktop access',
+            'Observing one-time banking PINs'
+          ],
+          mobileMoneyImpact: 'Allows the remote attacker to observe your banking credentials and steal 2FA OTP codes to transfer money out of your account.',
+          manualFixCommands: [
+            `taskkill /F /IM ${rat.processName}`,
+            `Stop-Process -Name "${rat.processName.replace('.exe', '')}" -Force`
+          ],
+          isRemediated: isFixed
+        }
       });
     });
 
@@ -131,7 +167,27 @@ export default function App() {
           : `Connected to verified server (${conn.remoteGeo || 'Verified Cloud'}). Normal activity.`,
         isSuspicious: isFlagged,
         statusText: isFlagged ? 'Suspicious Outside Link' : 'Safe Connection',
-        icon: Wifi
+        icon: Wifi,
+        threatIntel: {
+          id: conn.id,
+          title: `Unauthorized Outbound Reverse Shell Socket (${conn.remoteAddress}:${conn.remotePort})`,
+          threatType: 'Reverse Shell',
+          severity: 'Critical',
+          fileNameOrProcess: conn.processName,
+          locationOrPort: `${conn.remoteAddress}:${conn.remotePort} (${conn.remoteGeo || 'External'})`,
+          howItEntered: 'Established by background malware to punch through your home router firewall and connect back to an attacker command server.',
+          capabilities: [
+            'Interactive command-line shell access for the remote adversary',
+            'Exfiltrating local browser cookies and documents',
+            'Bypassing incoming firewall blocks via outbound TCP connection'
+          ],
+          mobileMoneyImpact: 'Gives the hacker a live backdoor terminal on your machine while you type sensitive passwords.',
+          manualFixCommands: [
+            `netstat -ano | findstr "${conn.remotePort}"`,
+            `taskkill /F /PID ${conn.pid}`
+          ],
+          isRemediated: isFixed
+        }
       });
     });
 
@@ -147,7 +203,27 @@ export default function App() {
           : `Legitimate software running from ${proc.path}.`,
         isSuspicious: isFlagged,
         statusText: isFlagged ? 'Hiding in Temp Folder' : 'Normal Program',
-        icon: FolderMinus
+        icon: FolderMinus,
+        threatIntel: {
+          id: proc.id,
+          title: `Suspicious Stealth Binary: ${proc.name}`,
+          threatType: 'Stealth Script',
+          severity: 'High',
+          fileNameOrProcess: proc.name,
+          locationOrPort: proc.path,
+          howItEntered: 'Dropped into %TEMP% or Downloads by a malicious web download, email lure, or infected USB drive.',
+          capabilities: [
+            'Executing from non-standard temporary directories',
+            'Evading standard antivirus directory sweeps',
+            'Acting as a dropper for secondary payloads'
+          ],
+          mobileMoneyImpact: 'Can inject keystroke loggers or clipboard monitors to swap copied mobile banking phone numbers.',
+          manualFixCommands: [
+            `taskkill /F /IM ${proc.name}`,
+            `del /f /q "${proc.path}"`
+          ],
+          isRemediated: isFixed
+        }
       });
     });
 
@@ -163,7 +239,25 @@ export default function App() {
           : 'Standard operating system background service.',
         isSuspicious: isFlagged,
         statusText: isFlagged ? 'Sneaky Auto-Start' : 'Verified Auto-Start',
-        icon: Power
+        icon: Power,
+        threatIntel: {
+          id: pers.id,
+          title: `Unauthorized Auto-Start Persistence: ${pers.name}`,
+          threatType: 'Persistence Hook',
+          severity: 'High',
+          fileNameOrProcess: pers.name,
+          locationOrPort: pers.locationDisplay,
+          howItEntered: 'Added directly to the Windows Registry Run key so the malware survives reboots.',
+          capabilities: [
+            'Automatically restarts the malicious payload every time Windows boots',
+            'Maintains persistent long-term access on your laptop'
+          ],
+          mobileMoneyImpact: 'Ensures the spy software continues watching your computer even after you turn it off and on again.',
+          manualFixCommands: [
+            `reg delete "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run" /v "${pers.name}" /f`
+          ],
+          isRemediated: isFixed
+        }
       });
     });
 
@@ -250,13 +344,20 @@ export default function App() {
       
       {/* 1. TOP HEADER & PWA INSTALL BAR */}
       <header className="px-6 py-4 max-w-4xl w-full mx-auto flex items-center justify-between border-b border-slate-800/60">
-        <div className="flex items-center space-x-2.5">
-          <div className="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold">
-            <ShieldCheck className="w-5 h-5" />
+        <div className="flex items-center space-x-3">
+          <div className="w-10 h-10 rounded-2xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold">
+            <ShieldCheck className="w-6 h-6" />
           </div>
           <div>
-            <h1 className="text-sm font-bold text-white tracking-tight">System Trust Scanner</h1>
-            <p className="text-[11px] text-slate-400">Installable Compromise & Virus Detector</p>
+            <div className="flex items-center gap-2">
+              <h1 className="text-sm font-bold text-white tracking-tight">System Trust Scanner</h1>
+              {machineProfile && (
+                <span className="text-[11px] font-mono bg-cyan-950 text-cyan-300 px-2 py-0.5 rounded-full border border-cyan-800">
+                  Host: {machineProfile.hostDeviceName}
+                </span>
+              )}
+            </div>
+            <p className="text-[11px] text-slate-400">Compromise & Virus Threat Neutralizer</p>
           </div>
         </div>
 
@@ -265,7 +366,7 @@ export default function App() {
           <div className="bg-slate-900 border border-slate-800 p-1 rounded-full flex items-center text-xs">
             <button
               onClick={() => setAppMode('real')}
-              className={`px-3 py-1 rounded-full font-medium transition-all ${
+              className={`px-3 py-1 rounded-full font-medium transition-all cursor-pointer ${
                 appMode === 'real'
                   ? 'bg-emerald-500 text-slate-950 font-bold shadow-sm'
                   : 'text-slate-400 hover:text-white'
@@ -275,7 +376,7 @@ export default function App() {
             </button>
             <button
               onClick={() => setAppMode('demo')}
-              className={`px-3 py-1 rounded-full font-medium transition-all ${
+              className={`px-3 py-1 rounded-full font-medium transition-all cursor-pointer ${
                 appMode === 'demo'
                   ? 'bg-cyan-500 text-slate-950 font-bold shadow-sm'
                   : 'text-slate-400 hover:text-white'
@@ -300,7 +401,7 @@ export default function App() {
       {/* 2. MAIN BODY */}
       <main className="max-w-3xl w-full mx-auto px-6 py-6 flex-1 space-y-6">
         
-        {/* MODE 1: REAL SCANNER (Actual real file scanning, device audit & native Windows scanner) */}
+        {/* MODE 1: REAL SCANNER (Actual real file scanning, whole folder scan, device audit & native Windows scanner) */}
         {appMode === 'real' && (
           <RealScannerCard />
         )}
@@ -315,7 +416,7 @@ export default function App() {
               <div className="bg-slate-950 p-1 rounded-full border border-slate-800 flex items-center text-xs">
                 <button
                   onClick={() => { setScenarioId('clean-laptop'); setRemediatedIds(new Set()); }}
-                  className={`px-3 py-1 rounded-full font-medium transition-all ${
+                  className={`px-3 py-1 rounded-full font-medium transition-all cursor-pointer ${
                     scenarioId === 'clean-laptop' && remediatedIds.size === 0
                       ? 'bg-emerald-500 text-slate-950 font-bold'
                       : 'text-slate-400 hover:text-white'
@@ -325,7 +426,7 @@ export default function App() {
                 </button>
                 <button
                   onClick={() => { setScenarioId('active-rat-attack'); setRemediatedIds(new Set()); }}
-                  className={`px-3 py-1 rounded-full font-medium transition-all ${
+                  className={`px-3 py-1 rounded-full font-medium transition-all cursor-pointer ${
                     scenarioId === 'active-rat-attack' && !isSafe
                       ? 'bg-rose-500 text-white font-bold'
                       : 'text-slate-400 hover:text-white'
@@ -499,7 +600,7 @@ export default function App() {
                         </div>
                       </div>
 
-                      <div className="flex items-center justify-between sm:justify-end gap-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-800/60 shrink-0">
+                      <div className="flex items-center justify-between sm:justify-end gap-2 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-800/60 shrink-0">
                         <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full border flex items-center gap-1 ${
                           item.isSuspicious
                             ? 'bg-rose-950 text-rose-300 border-rose-800'
@@ -510,12 +611,26 @@ export default function App() {
                         </span>
 
                         {item.isSuspicious && (
-                          <button
-                            onClick={() => handleFixSingle(item.id)}
-                            className="px-2.5 py-1 rounded-lg text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white transition-colors"
-                          >
-                            Fix
-                          </button>
+                          <div className="flex items-center gap-1.5">
+                            {item.threatIntel && (
+                              <button
+                                onClick={() => setSelectedThreat(item.threatIntel!)}
+                                className="px-2 py-1 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 flex items-center gap-1 cursor-pointer"
+                                title="View Threat Dossier & Intelligence"
+                              >
+                                <Info className="w-3 h-3 text-cyan-400" />
+                                <span>Info</span>
+                              </button>
+                            )}
+
+                            <button
+                              onClick={() => handleFixSingle(item.id)}
+                              className="px-2.5 py-1 rounded-lg text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white transition-colors cursor-pointer flex items-center gap-1"
+                            >
+                              <Wrench className="w-3 h-3" />
+                              <span>Fix</span>
+                            </button>
+                          </div>
                         )}
                       </div>
                     </div>
@@ -533,16 +648,20 @@ export default function App() {
       {/* 3. FOOTER */}
       <footer className="px-6 py-4 max-w-4xl w-full mx-auto border-t border-slate-800/60 flex items-center justify-between text-xs text-slate-400">
         <div>
-          <span>Mode: </span>
-          <strong className="text-slate-200">
-            {appMode === 'real' ? 'Real Device Inspection' : `Simulation (${evaluation.trustScore}% Trust)`}
+          <span>Host: </span>
+          <strong className="text-cyan-400 mr-2 font-mono">
+            {machineProfile?.hostDeviceName || 'Detecting...'}
+          </strong>
+          <span>• Trust: </span>
+          <strong className={isSafe ? 'text-emerald-400' : 'text-rose-400'}>
+            {evaluation.trustScore}%
           </strong>
         </div>
 
         <div className="flex items-center space-x-4">
           <button 
             onClick={() => setPythonModalOpen(true)}
-            className="hover:text-slate-200 transition-colors flex items-center gap-1"
+            className="hover:text-slate-200 transition-colors flex items-center gap-1 cursor-pointer"
           >
             <FileCode className="w-3.5 h-3.5 text-emerald-400" />
             <span>Python Script</span>
@@ -550,13 +669,24 @@ export default function App() {
           <span>•</span>
           <button 
             onClick={() => setReportModalOpen(true)}
-            className="hover:text-slate-200 transition-colors flex items-center gap-1"
+            className="hover:text-slate-200 transition-colors flex items-center gap-1 cursor-pointer"
           >
             <FileText className="w-3.5 h-3.5 text-cyan-400" />
             <span>Full Audit Report</span>
           </button>
         </div>
       </footer>
+
+      {/* Threat Detail Modal */}
+      <ThreatDetailModal
+        threat={selectedThreat}
+        isOpen={!!selectedThreat}
+        onClose={() => setSelectedThreat(null)}
+        onRemediate={(id) => {
+          handleFixSingle(id);
+          setSelectedThreat(prev => prev ? { ...prev, isRemediated: true } : null);
+        }}
+      />
 
       {/* Python Script Modal */}
       <PythonScriptModal
